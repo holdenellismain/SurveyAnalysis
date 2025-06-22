@@ -6,7 +6,7 @@ Through my research position, I got access to data from a survey that quizzed 1,
 
 My goal was to measure exactly how well the survey performs at measuring student preparedness and how it can be improved.
 
-### Latent Variable Modelling Explained
+### Method
 
 Preparedness was modelled using latent variable. This is an unsupervised machine learning technique which imagines binary responses, $x_i$ (in this case, correct or incorrect) as tied to a standard normally distributed latent variable, $z_n$ (in this case, preparedness of a student). The probability of answering correctly is modelled by the following equation
 ```math
@@ -28,6 +28,8 @@ Isolating for a single question helps build intuition for these functions. The x
 - Latent Variable Modelling
 
 ## Steps
+
+
 
 ## Results
 
