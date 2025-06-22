@@ -1,0 +1,129 @@
+Look into OpenMX and TidyLPA for categorical latent variables
+
+```{r}
+library(dplyr)
+library(ltm)
+library(naniar)
+library(mirt)
+library(gt)
+library(webshot2)
+```
+
+Load in data
+
+```{r load data}
+quiz_qs <- read.csv("/cloud/project/02_data_cleaning/college_making_it_happen/eaop_cmih_apr_09_25_cleaned.csv") %>%
+  distinct(id, .keep_all = TRUE) %>%
+  dplyr::select(starts_with("qz")) %>%
+  filter_all(any_vars(!is.na(.))) %>% 
+  dplyr::select(where(~ !all(is.na(.)))) %>%
+  mutate(non_na_count = rowSums(!is.na(.))) %>%
+  filter(non_na_count == 3) %>%
+  dplyr::select(-non_na_count)
+
+vis_miss(quiz_qs)
+
+table(unlist(quiz_qs), useNA = "ifany")
+```
+
+```{r set seed}
+set.seed(4292025)
+```
+
+Test unidimensionality assumption of the data. If the p-value is > 0.05 the models are not significantly different and the assumption is likely met.
+
+```{r assumption checking}
+unidim <- mirt(quiz_qs, model=1, itemtype = "3PL", verbose = FALSE)
+pars <- mod2values(unidim)
+pars$est[pars$name == 'g'] <- FALSE     # Don't estimate
+pars$value[pars$name == 'g'] <- 0.25    # Set to 0.25
+pars$value[pars$name == 'g' & pars$item == 'qz_tf_ag'] <- 0.5 #set to 0.5 for T/F questions
+pars$value[pars$name == 'g' & pars$item == 'qz_tf_relig'] <- 0.5 #set to 0.5 for T/F questions
+unidim <- mirt(quiz_qs, 1, itemtype = '3PL', verbose = FALSE, pars = pars)
+
+twodim <- mirt(quiz_qs, model=2, verbose = FALSE, itemtype = "3PL")
+pars <- mod2values(twodim)
+pars$est[pars$name == 'g'] <- FALSE     # Don't estimate
+pars$value[pars$name == 'g'] <- 0.25    # Set to 0.25
+pars$value[pars$name == 'g' & pars$item == 'qz_tf_ag'] <- 0.5 #set to 0.5 for T/F questions
+pars$value[pars$name == 'g' & pars$item == 'qz_tf_relig'] <- 0.5 #set to 0.5 for T/F questions
+twodim <- mirt(quiz_qs, 2, itemtype = '3PL', verbose = FALSE, pars = pars)
+
+anova(unidim, twodim)
+```
+
+Set up and fit model architecture with locked guessing parameter
+
+```{r model}
+guess_constraint <- cbind(1:13,1,c(rep(0.25,9),0.5,0.25,0.25,0.5))
+
+fit2 <- tpm(quiz_qs, constraint=guess_constraint, na.action=NULL) #assumes participants can guess difficult questions 25% of the time and that discrimination is equal for all Qs
+```
+
+Save a table of parameter estimates
+
+```{r table}
+raw_params <- round(coef(fit2, prob=TRUE),2)
+fit_params <- data.frame(raw_params)
+
+table_gt <- fit_params %>%
+  gt(rownames_to_stub = T) %>%
+  tab_header(
+    title = "Estimated Parameters by Question
+    "
+  ) %>%
+  cols_label(
+    Gussng = "Guessing",
+    Dffclt = "Diff",
+    Dscrmn = "Discrim",
+    P.x.1.z.0. = "P(x=1|z=0)"
+  )
+
+gtsave(table_gt, "research_table.png")
+```
+
+Total information
+
+```{r}
+jpeg("full_info.jpg", width = 800, height = 600, quality = 100)
+
+plot(fit2, type="IIC", items=0)
+
+dev.off()
+```
+
+All questions
+
+```{r}
+plot(fit2, type="IIC", legend=FALSE)
+```
+
+Questions that discriminate well
+
+```{r}
+jpeg("disc_qs_icc.jpg", width = 1000, height = 600, quality = 100)
+
+layout(rbind(1,2), heights=c(8,0.5))  # put legend on bottom 1/8th of the chart
+
+plot(fit2, type="ICC", items=c(1,4,11,12), zrange=c(-3,3), legend=FALSE, annot=FALSE)
+
+par(mar=c(0, 0, 0, 0))
+# c(bottom, left, top, right)
+plot.new()
+legend("bottom",
+       legend = c("qz_piq_num", "qz_math", "qz_csu_gpa", "qz_uc_gpa"),
+       col = c("black", "red", "green", "blue"),lty = 1,horiz = TRUE,inset = 0,
+       bty = "n") 
+
+dev.off()
+```
+
+Questions that discriminate poorly
+
+```{r}
+jpeg("poor_qs.jpg", width = 800, height = 600, quality = 100)
+
+plot(fit2, type="IIC", legend=TRUE, items=c(2,3,5,6,7,8,9,10,13), cex=0.7, zrange=c(-3,3))
+
+dev.off()
+```
